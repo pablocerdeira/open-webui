@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Literal, Optional, overload
 
@@ -703,7 +704,7 @@ async def generate_chat_completion(
     idx = 0
 
     payload = {**form_data}
-    metadata = payload.pop("metadata", None)
+    metadata_from_form = payload.pop("metadata", None)
 
     model_id = form_data.get("model")
     model_info = Models.get_model_by_id(model_id)
@@ -716,7 +717,7 @@ async def generate_chat_completion(
 
         params = model_info.params.model_dump()
         payload = apply_model_params_to_body_openai(params, payload)
-        payload = apply_model_system_prompt_to_body(params, payload, metadata, user)
+        payload = apply_model_system_prompt_to_body(params, payload, metadata_from_form, user)
 
         # Check if user has access to the model
         if not bypass_filter and user.role == "user":
@@ -821,6 +822,51 @@ async def generate_chat_completion(
     else:
         request_url = f"{url}/chat/completions"
         headers["Authorization"] = f"Bearer {key}"
+
+    # >>> INÍCIO DA MODIFICAÇÃO PARA METADADOS (POSIÇÃO CORRETA E SEGURA) <<<
+    # 'payload' aqui é o dicionário Python após todas as manipulações anteriores.
+
+    # Pega o metadata que possa existir no payload neste ponto, ou começa um novo dict.
+    final_metadata_for_request = payload.get("metadata", {})
+    if not isinstance(final_metadata_for_request, dict):
+        final_metadata_for_request = {}
+
+    # Adiciona/Sobrescreve seus campos customizados
+    if user and hasattr(user, 'id') and user.id:
+        final_metadata_for_request["openwebui_user_id"] = str(user.id)
+    else:
+        final_metadata_for_request["openwebui_user_id"] = "unknown_openwebui_user"
+        
+    # Adicionar nome do usuário
+    if user and hasattr(user, 'name') and user.name:
+        final_metadata_for_request["openwebui_user_name"] = str(user.name)
+    else:
+        final_metadata_for_request["openwebui_user_name"] = "unknown_user_name"
+        
+    # Adicionar email do usuário
+    if user and hasattr(user, 'email') and user.email:
+        final_metadata_for_request["openwebui_user_email"] = str(user.email)
+    else:
+        final_metadata_for_request["openwebui_user_email"] = "unknown_user_email"
+
+    instance_name_from_env = os.environ.get("INSTANCE_NAME")
+    if instance_name_from_env:
+        final_metadata_for_request["openwebui_instance_name"] = instance_name_from_env
+
+    # chat_id e stream_id/request_id do form_data original
+    chat_id_original = form_data.get("chat_id")
+    if chat_id_original:
+        final_metadata_for_request["openwebui_chat_id"] = str(chat_id_original)
+
+    message_id_original = form_data.get("stream_id")
+    if message_id_original:
+        final_metadata_for_request["openwebui_request_id"] = str(message_id_original)
+
+    payload["metadata"] = final_metadata_for_request
+    
+    # Adicione um log para verificar o payload final antes da conversão para JSON
+    log.info(f"OpenWebUI Payload FINAL to LiteLLM: {json.dumps(payload, indent=2)}")
+    # >>> FIM DA MODIFICAÇÃO PARA METADADOS <<<
 
     payload = json.dumps(payload)
 
