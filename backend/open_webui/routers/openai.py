@@ -854,13 +854,21 @@ async def generate_chat_completion(
         final_metadata_for_request["openwebui_instance_name"] = instance_name_from_env
 
     # chat_id e stream_id/request_id do form_data original
-    chat_id_original = form_data.get("chat_id")
+    # DEBUG: Log completo do form_data para encontrar chat_id
+    log.info(f"DEBUG FORM_DATA COMPLETO: {json.dumps(form_data, indent=2, default=str)}")
+    chat_id_original = form_data.get("metadata", {}).get("chat_id") or form_data.get("chat_id")
     if chat_id_original:
         final_metadata_for_request["openwebui_chat_id"] = str(chat_id_original)
+        log.info(f"CHAT_ID ENCONTRADO: {chat_id_original}")
+    else:
+        log.info("CHAT_ID NÃO ENCONTRADO no form_data")
 
-    message_id_original = form_data.get("stream_id")
+    message_id_original = form_data.get("metadata", {}).get("message_id") or form_data.get("stream_id")
     if message_id_original:
         final_metadata_for_request["openwebui_request_id"] = str(message_id_original)
+        log.info(f"STREAM_ID ENCONTRADO: {message_id_original}")
+    else:
+        log.info("STREAM_ID NÃO ENCONTRADO no form_data")
 
     payload["metadata"] = final_metadata_for_request
     
