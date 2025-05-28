@@ -320,3 +320,51 @@ async def generate_function_chat_completion(
 
         message = await get_message_content(res)
         return openai_chat_completion_message_template(form_data["model"], message)
+
+
+def format_citations_as_sources(citations):
+    """Format Perplexity citations as Open-WebUI sources (baseado no PR #11216)"""
+    sources = []
+    for i, citation in enumerate(citations, 1):
+        if isinstance(citation, str):
+            # Citação é uma URL simples
+            sources.append({
+                "source": {
+                    "name": f"Fonte {i}",
+                    "url": citation
+                },
+                "document": [],
+                "metadata": []
+            })
+        elif isinstance(citation, dict):
+            # Citação tem estrutura mais complexa
+            url = citation.get("url", "")
+            title = citation.get("title", citation.get("name", f"Fonte {i}"))
+            
+            sources.append({
+                "source": {
+                    "name": title,
+                    "url": url
+                },
+                "document": [],
+                "metadata": []
+            })
+    
+    return sources
+
+
+async def emit_sources(citations, extra_params, event_emitter):
+    """Emit sources to Open-WebUI interface (baseado no PR #11216)"""
+    if not citations or not event_emitter:
+        return
+    
+    # Convert citations to sources format
+    sources = format_citations_as_sources(citations)
+    
+    # Emit sources event
+    await event_emitter({
+        "type": "sources",
+        "data": sources
+    })
+    
+    log.info(f"Emitted {len(sources)} sources from Perplexity citations")

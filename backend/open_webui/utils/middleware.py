@@ -925,6 +925,16 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     if len(sources) > 0:
         events.append({"sources": sources})
+    
+    # Intercepta citações do Perplexity quando ele responde diretamente
+    if hasattr(request, 'state') and hasattr(request.state, 'perplexity_citations'):
+        perplexity_citations = request.state.perplexity_citations
+        if perplexity_citations:
+            from open_webui.functions import format_citations_as_sources
+            perplexity_sources = format_citations_as_sources(perplexity_citations)
+            if perplexity_sources:
+                events.append({"sources": perplexity_sources})
+                log.info(f"Adicionadas {len(perplexity_sources)} fontes do Perplexity via interceptação")
 
     if model_knowledge:
         await event_emitter(
@@ -1618,6 +1628,25 @@ async def process_chat_response(
 
                         try:
                             data = json.loads(data)
+                            
+                            # Intercepta citações do Perplexity em respostas streaming
+                            if "citations" in data:
+                                from open_webui.functions import format_citations_as_sources, emit_sources
+                                perplexity_citations = data.get("citations", [])
+                                if perplexity_citations:
+                                    log.info(f"Interceptadas {len(perplexity_citations)} citações do Perplexity em streaming")
+                                    # Emite sources imediatamente para a interface
+                                    await emit_sources(perplexity_citations, extra_params, event_emitter)
+                            
+                            # Intercepta sources que já vêm formatadas
+                            if "sources" in data:
+                                sources_data = data.get("sources", [])
+                                if sources_data:
+                                    log.info(f"Interceptadas {len(sources_data)} sources em streaming")
+                                    await event_emitter({
+                                        "type": "sources", 
+                                        "data": sources_data
+                                    })
 
                             data, _ = await process_filter_functions(
                                 request=request,
