@@ -83,6 +83,35 @@ async def get_knowledge(user=Depends(get_verified_user)):
             )
         )
 
+    # Adicionar Knowledge Bases externas
+    try:
+        from open_webui.utils.external_knowledge import fetch_external_kbs
+        
+        external_kbs = await fetch_external_kbs(user_token=getattr(user, 'token', None))
+        
+        # Converter KBs externas para o formato KnowledgeUserResponse
+        for external_kb in external_kbs:
+            # Adaptar formato do LlamaIndex para Open-WebUI
+            knowledge_with_files.append(
+                KnowledgeUserResponse(
+                    id=external_kb.get("id", ""),
+                    name=external_kb.get("name", ""),
+                    description=external_kb.get("description", ""),
+                    user_id=external_kb.get("user_id", "shared"),
+                    access_control={"read": {"user_ids": [], "group_ids": []}, "write": {"user_ids": [], "group_ids": []}},
+                    data=external_kb.get("data", {}),
+                    meta=external_kb.get("meta", {}),
+                    created_at=0,  # External KBs don't have timestamps
+                    updated_at=0,
+                    files=[]  # External KBs manage files differently
+                )
+            )
+            
+        log.info(f"Incluídas {len(external_kbs)} Knowledge Bases externas")
+        
+    except Exception as e:
+        log.warning(f"Erro ao buscar Knowledge Bases externas: {e}")
+
     return knowledge_with_files
 
 
