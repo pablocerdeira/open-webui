@@ -2037,6 +2037,19 @@ RAG_EMBEDDING_ENGINE = PersistentConfig(
     os.environ.get("RAG_EMBEDDING_ENGINE", ""),
 )
 
+# External Embedding API Configuration (for LlamaIndex shared GPU)
+RAG_EMBEDDING_API_URL = PersistentConfig(
+    "RAG_EMBEDDING_API_URL",
+    "rag.embedding_api_url",
+    os.environ.get("RAG_EMBEDDING_API_URL", ""),
+)
+
+RAG_EMBEDDING_API_KEY = PersistentConfig(
+    "RAG_EMBEDDING_API_KEY",
+    "rag.embedding_api_key",
+    os.environ.get("RAG_EMBEDDING_API_KEY", ""),
+)
+
 PDF_EXTRACT_IMAGES = PersistentConfig(
     "PDF_EXTRACT_IMAGES",
     "rag.pdf_extract_images",

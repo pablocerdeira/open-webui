@@ -437,6 +437,27 @@ def get_embedding_function(
         return lambda query, prefix=None, user=None: generate_multiple(
             query, prefix, user, func
         )
+    elif embedding_engine == "external":
+        # Support for external embedding API (LlamaIndex shared GPU)
+        func = lambda query, prefix=None, user=None: generate_external_embeddings(
+            model=embedding_model,
+            text=query,
+            prefix=prefix,
+            url=url,
+            key=key,
+            user=user,
+        )
+
+        def generate_multiple_external(query, prefix, user, func):
+            if isinstance(query, list):
+                # External API handles batching internally
+                return func(query, prefix=prefix, user=user)
+            else:
+                return func([query], prefix=prefix, user=user)[0] if query else []
+
+        return lambda query, prefix=None, user=None: generate_multiple_external(
+            query, prefix, user, func
+        )
     else:
         raise ValueError(f"Unknown embedding engine: {embedding_engine}")
 
@@ -905,3 +926,63 @@ class RerankCompressor(BaseDocumentCompressor):
             )
             final_results.append(doc)
         return final_results
+
+
+def generate_external_embeddings(
+    model: str,
+    text: Union[str, list],
+    prefix: Optional[str] = None,
+    url: str = "",
+    key: str = "",
+    user: Optional[UserModel] = None,
+) -> list:
+    """
+    Generate embeddings using external API (LlamaIndex shared GPU)
+    """
+    try:
+        # Ensure text is a list
+        if isinstance(text, str):
+            texts = [text]
+        else:
+            texts = text
+        
+        # Apply prefix if provided
+        if prefix:
+            texts = [f"{prefix} {t}" for t in texts]
+        
+        # Prepare request payload
+        payload = {
+            "texts": texts,
+            "model": model
+        }
+        
+        # Make request to external API
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        if key and key != "dummy_key":
+            headers["Authorization"] = f"Bearer {key}"
+        
+        log.debug(f"Calling external embedding API: {url}")
+        log.debug(f"Request payload: model={model}, text_count={len(texts)}")
+        
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=120  # 2 minutes timeout for large batches
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        
+        embeddings = result.get("embeddings", [])
+        log.debug(f"External API returned {len(embeddings)} embeddings")
+        
+        return embeddings
+        
+    except Exception as e:
+        log.error(f"Error calling external embedding API: {str(e)}")
+        log.error(f"URL: {url}, Model: {model}")
+        raise Exception(f"External embedding API error: {str(e)}")
